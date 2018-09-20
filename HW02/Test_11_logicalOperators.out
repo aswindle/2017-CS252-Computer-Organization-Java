@@ -1,0 +1,21 @@
+AND:
+false and false : false
+false and  true : false
+ true and false : false
+ true and  true :  true
+
+OR:
+false or false : false
+false or  true :  true
+ true or false :  true
+ true or  true :  true
+
+NOT:
+~false: true
+~ true: false
+
+XOR:
+false xor false : false
+false xor  true :  true
+ true xor false :  true
+ true xor  true : false

@@ -1,0 +1,196 @@
+#! /bin/bash
+
+
+# Java figures out the proper student .java files that are required - but we
+# need a little help for C and assembly.  If you leave either of these blank,
+# then this type of testing simply won't work.
+C_SRC=proj01.c
+S_SRC=
+
+
+
+if [[ $(ls -1 *.java 2>/dev/null) != "" ]]
+then
+  echo "Compiling all of the Java sources - your code, plus all of the testcases..."
+  javac *.java
+fi
+
+
+if [[ ${S_SRC} != "" ]]
+then
+  if [[ ! -f mars.jar ]]
+  then
+    echo "Cannot find the Mars JAR file 'mars.jar'.  Please copy the JAR file into the same directoy as the grading script - and name it 'mars.jar' ."
+    exit 1
+  fi
+fi
+
+
+attempts=0
+pass=0
+
+# this variable can be increased, to apply various penalties for breaking
+# the rules!
+penaltyDivisor=1
+
+failList=""
+
+
+
+# if we have C or Java sources, check for any + operators in it - but make
+# sure to exclude testcases.
+JAVA_SRCS=$(ls -1 *.java | grep -v -i -E "^Test_" | grep -v -E "Base.java$")
+if [[ ${C_SRC} != "" || ${JAVA_SRCS} != "" ]]
+then
+  if [[ $(grep -E "[^+][+][^+]" ${C_SRC} ${JAVA_SRCS}) != "" ]]
+  then
+    echo
+    echo "ERROR: The grading script found that you used + or += in your C or Java code - your grade will be cut in half."
+
+    penaltyDivisor=$(( penaltyDivisor*2 ))
+  fi
+fi
+
+
+
+echo
+echo "************* Running the testcases *************"
+echo
+
+
+for TESTCASE in $(ls -1 Test_*.java test_*.[cs])
+do
+  attempts=$(( attempts+1 ))
+
+  BASE=$(echo $TESTCASE | rev | cut -f2- -d'.' | rev)
+  TYPE=$(echo $TESTCASE | rev | cut -f1  -d'.' | rev)
+
+  if [[ ! -f $BASE.out ]]
+  then
+    echo "******************************"
+    echo "* TESTCASE '$TESTCASE' FAILED"
+    echo "******************************"
+    echo "ERROR: The testcase file '$TESTCASE' was found, but could not find a matching output file '$BASE.out'"
+
+    failList="$failList
+*     $TESTCASE"
+    continue
+  fi
+
+
+  # how long is the output example?  We'll use this to calculate exactly how
+  # much output we'll save.
+  lines=$(wc -l $BASE.out | cut -f1 -d' ')
+  lines=$(( lines*2 + 10 ))
+
+
+  # run the testcase.  Save the file into a temporary file.  Of course, each
+  # different type of testcase is run in a different way.
+  if [[ $TYPE = "s" ]]
+  then
+    echo "TODO: Assembly language" | tee $BASE.student_output
+
+    failList="$failList
+*     $TESTCASE"
+    continue
+
+    timeout 5s java -jar mars.jar sm ${S_SRC} $BASE.s 2>&1 | cut -c-1000 | tail -n+3 | head -n$lines > $BASE.student_output
+
+  elif [[ $TYPE = "java" ]]
+  then
+    timeout 5s java $BASE 2>&1 | cut -c-1000 | head -n$lines > $BASE.student_output
+
+  elif [[ $TYPE = "c" ]]
+  then
+    echo "Compiling the testcase $TESTCASE, and linking it to ${C_SRC}..."
+    gcc -std=gnu99 ${C_SRC} $BASE.c -o $BASE
+
+    RC=$?
+    if [[ $RC != 0 ]]
+    then
+      echo
+      echo "******************************"
+      echo "* TESTCASE '$TESTCASE' FAILED"
+      echo "******************************"
+      echo "ERROR: The compilation process had a non-zero return code $RC."
+
+      continue
+    fi
+
+    {
+      timeout 5s ./$BASE >(cut -c-1000 | head -n$lines) 2>&1
+
+      RC=$?
+      if [[ $RC != 0 ]]
+      then
+        echo
+        echo "ERROR return code was: $RC"
+      fi
+    } > $BASE.student_output
+
+  else
+    echo "ERROR: The file extension $TYPE is not a recognized testcase type." | tee $BASE.student_output
+
+    failList="$failList
+*     $TESTCASE"
+    continue
+  fi
+
+
+  # if running on Windows, we may need to clean up the line endings.
+  sed -i 's/\r//g' $BASE.student_output
+
+
+  if [[ $(diff $BASE.student_output $BASE.out) != "" ]]
+  then
+    echo "******************************"
+    echo "* TESTCASE '$TESTCASE' FAILED"
+    echo "******************************"
+    echo
+    echo "     ----- diff OUTPUT ----"
+    diff $BASE.out $BASE.student_output
+    echo "     ----- END diff ----"
+    echo
+
+    failList="$failList
+*     $TESTCASE"
+
+  else
+    echo "******************************"
+    echo "* Testcase '$TESTCASE' passed"
+    echo "******************************"
+
+    rm $BASE.student_output
+    pass=$(( pass+1 ))
+
+    echo
+  fi
+done
+
+
+MAX_AUTO_SCORE=70
+
+echo
+echo "*******************************************"
+echo "*            OVERALL REPORT"
+echo "* attempts: $attempts"
+echo "* passed:   $pass"
+echo "*"
+
+if [[ $penaltyDivisor != 1 ]]
+then
+  echo "* penaltyDivisor: $penaltyDivisor    (see above)"
+fi
+
+echo "* score:    $(( MAX_AUTO_SCORE * pass / attempts / penaltyDivisor ))"
+
+if [[ $failList != "" ]]
+then
+  echo "*"
+  echo "* failed:  $failList"
+  echo "*"
+fi
+
+echo "*******************************************"
+
+

@@ -1,0 +1,7 @@
+AND: false false -> false
+OR : false false -> false
+NOT: false -> true
+XOR: false false -> false
+HALF ADDER: false false -> false false
+FULL ADDER: false false false -> false false
+ADD32 (too much to print): false true
